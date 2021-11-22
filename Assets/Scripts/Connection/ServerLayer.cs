@@ -3,7 +3,8 @@ using System;
 using Microsoft.Extensions.DependencyInjection;
 using System.Collections;
 using System.Collections.Generic;
-
+using System.Net;
+using UnityEngine;
 
 namespace ServerLayer
 {
@@ -17,18 +18,34 @@ namespace ServerLayer
             Callbacks.Add("Moved", callback);
             return this;
         }
-
         public GameConnectionClient MovementError(Func<String, Int32> callback)
         {
             if (Callbacks.ContainsKey("MovementError")) throw new Exception("MovementError method is already binded!");
             Callbacks.Add("MovementError", callback);
             return this;
         }
-
-        public GameConnectionClient PlayerJoined(Func<Int32> callback)
+        public GameConnectionClient PlayerJoined(Func<PlayerDto, Int32> callback)
         {
             if (Callbacks.ContainsKey("PlayerJoined")) throw new Exception("PlayerJoined method is already binded!");
             Callbacks.Add("PlayerJoined", callback);
+            return this;
+        }
+        public GameConnectionClient PlayerDisconnected(Func<Int64, Int32> callback)
+        {
+            if (Callbacks.ContainsKey("PlayerDisconnected")) throw new Exception("PlayerDisconnected method is already binded!");
+            Callbacks.Add("PlayerDisconnected", callback);
+            return this;
+        }
+        public GameConnectionClient State(Func<StateDto, Int32> callback)
+        {
+            if (Callbacks.ContainsKey("State")) throw new Exception("State method is already binded!");
+            Callbacks.Add("State", callback);
+            return this;
+        }
+        public GameConnectionClient PlayerData(Func<PlayerDto, Int32> callback)
+        {
+            if (Callbacks.ContainsKey("PlayerData")) throw new Exception("PlayerData method is already binded!");
+            Callbacks.Add("PlayerData", callback);
             return this;
         }
 
@@ -42,12 +59,12 @@ namespace ServerLayer
 
         private HubConnection _connection;
 
-        public GameConnection(String baseUrl)
+        public GameConnection(String baseUrl, Cookie cookie)
         {
             _connection = new HubConnectionBuilder()
                 .WithUrl(baseUrl + "/game", (options) =>
                 {
-                
+                    options.Cookies.Add(cookie);
                 })
                 .Build();
 
@@ -61,6 +78,30 @@ namespace ServerLayer
             {
                 Client.Callbacks.TryGetValue("MovementError", out var callback);
                 callback.DynamicInvoke(errorString);
+            });
+
+            _connection.On<PlayerDto>("PlayerJoined", (player) =>
+            {
+                Client.Callbacks.TryGetValue("PlayerJoined", out var callback);
+                callback.DynamicInvoke(player);
+            });
+
+            _connection.On<Int64>("PlayerDisconnected", (playerId) =>
+            {
+                Client.Callbacks.TryGetValue("PlayerDisconnected", out var callback);
+                callback.DynamicInvoke(playerId);
+            });
+
+            _connection.On<StateDto>("State", (state) =>
+            {
+                Client.Callbacks.TryGetValue("State", out var callback);
+                callback.DynamicInvoke(state);
+            });
+
+            _connection.On<PlayerDto>("PlayerData", (player) =>
+            {
+                Client.Callbacks.TryGetValue("PlayerData", out var callback);
+                callback.DynamicInvoke(player);
             });
 
             Client = new GameConnectionClient();
@@ -84,6 +125,7 @@ namespace ServerLayer
             if (!Client.Callbacks.ContainsKey("Moved")) throw new Exception("Moved Is Not Bind For Client!");
             if (!Client.Callbacks.ContainsKey("MovementError")) throw new Exception("MovementError Is Not Bind For Client!");
             if (!Client.Callbacks.ContainsKey("PlayerJoined")) throw new Exception("PlayerJoined Is Not Bind For Client!");
+            if (!Client.Callbacks.ContainsKey("PlayerDisconnected")) throw new Exception("PlayerDisconnected Is Not Bind For Client!");
         }
     }
 
@@ -110,6 +152,23 @@ namespace ServerLayer
         {
             Connection.InvokeAsync("MoveBackward");
         }
+
+        public void Disconnect()
+        {
+            Connection.InvokeAsync("Disconnect");
+        }
+    }
+
+    public class PlayerDto
+    {
+        public Int64 ID { get; set; }
+        public float X { get; set; }
+        public float Z { get; set; }
+    }
+
+    public class StateDto
+    {
+        public List<PlayerDto> Players { get; set; }
     }
 }
 
